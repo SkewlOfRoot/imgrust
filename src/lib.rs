@@ -5,23 +5,6 @@ use std::path::PathBuf;
 use image::io::Reader as ImageReader;
 use mozjpeg::{ColorSpace, Compress, ScanMode};
 
-pub struct CommandArgs {
-    pub input_path: String,
-    pub output_path: String,
-}
-
-impl CommandArgs {
-    pub fn new(args: &[String]) -> Result<CommandArgs, &str> {
-        if args.len() < 3 {
-            return Err("not enough arguments.");
-        }
-        Ok(CommandArgs {
-            input_path: args[1].clone(),
-            output_path: args[2].clone(),
-        })
-    }
-}
-
 pub fn compress_image_files(
     input_folder_path: &str,
     output_folder_path: &str,

@@ -1,21 +1,41 @@
-use std::env;
+use std::path::PathBuf;
 use std::process;
 
-use imgrust::{compress_image_files, CommandArgs};
+use clap::{Args, Parser, Subcommand};
+
+use imgrust::compress_image_files;
+
+#[derive(Parser)]
+#[command(version, about, long_about = None)]
+#[command(propagate_version = true)]
+struct Cli {
+    #[command(subcommand)]
+    commands: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    Compress(CompressArgs),
+}
+
+#[derive(Args)]
+struct CompressArgs {
+    input_folder: Option<String>,
+    output_folder: Option<String>,
+}
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
+    let cli = Cli::parse();
 
-    let command_args = CommandArgs::new(&args).unwrap_or_else(|err| {
-        println!("problem parsing arguments: {}", err);
-        process::exit(1);
-    });
-
-    if let Err(e) = compress_image_files(
-        command_args.input_path.as_str(),
-        command_args.output_path.as_str(),
-    ) {
-        println!("Application error {}", e);
-        process::exit(1);
+    match &cli.commands {
+        Commands::Compress(args) => {
+            if let Err(e) = compress_image_files(
+                args.input_folder.as_ref().expect("").as_str(),
+                args.output_folder.as_ref().expect("").as_str(),
+            ) {
+                println!("Application error {}", e);
+                process::exit(1);
+            }
+        }
     }
 }
