@@ -22,9 +22,33 @@ impl CommandArgs {
     }
 }
 
-pub fn compress_image_files(input_path: &str, output_path: &str) -> Result<(), Box<dyn Error>> {
-    let paths = get_jpg_paths(input_path)?;
+pub fn compress_image_files(
+    input_folder_path: &str,
+    output_folder_path: &str,
+) -> Result<(), Box<dyn Error>> {
+    let input_paths = get_jpg_paths(input_folder_path)?;
+
+    for input_path in input_paths {
+        let output_path = get_output_path(output_folder_path, &input_path);
+
+        println!("output_path: {:?}", output_path);
+        println!("input_path: {:?}", input_path);
+
+        compress(input_path, output_path)
+    }
+
     Ok(())
+}
+
+fn get_output_path(output_folder_path: &str, input_path: &PathBuf) -> PathBuf {
+    let mut output_string = String::from(output_folder_path);
+    if !output_folder_path.ends_with('\\') {
+        output_string.push('\\');
+    }
+    let mut output_path = PathBuf::from(output_string);
+    let file_name = input_path.file_name().expect("Failed to get file name.");
+    output_path.push(file_name);
+    output_path
 }
 
 fn get_jpg_paths(folder_path: &str) -> Result<Vec<PathBuf>, Box<dyn Error>> {
