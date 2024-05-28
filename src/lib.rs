@@ -40,8 +40,6 @@ pub fn compress_image_files(
 fn get_output_path(output_folder_path: &Path, input_path: &Path) -> PathBuf {
     let mut output_file_path = PathBuf::from(output_folder_path);
 
-    //PathBuf::from_str(output_folder_path).expect("Failed to convert string to path.");
-
     let file_name = input_path
         .file_name()
         .expect("Failed to get file name from path.");
