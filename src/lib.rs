@@ -1,6 +1,10 @@
+use indicatif::ProgressBar;
+use rayon::prelude::*;
 use std::error::Error;
 use std::fs::{self};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::str::FromStr;
+use std::time::Instant;
 
 use image::io::Reader as ImageReader;
 use mozjpeg::{ColorSpace, Compress, ScanMode};
@@ -9,49 +13,60 @@ pub fn compress_image_files(
     input_folder_path: &str,
     output_folder_path: &str,
 ) -> Result<(), Box<dyn Error>> {
+    let start = Instant::now();
+
     let input_paths = get_jpg_paths(input_folder_path)?;
 
+    let mut names: Vec<(PathBuf, PathBuf)> = Vec::new();
     for input_path in input_paths {
         let output_path = get_output_path(output_folder_path, &input_path);
-
-        println!("output_path: {:?}", output_path);
-        println!("input_path: {:?}", input_path);
-
-        compress(input_path, output_path)
+        names.push((input_path, output_path));
     }
+
+    let bar = ProgressBar::new(names.len().try_into().unwrap());
+
+    names.par_iter().for_each(|x| {
+        compress(&x.1, &x.1);
+        bar.inc(1)
+    });
+
+    let end = Instant::now();
+    let duration = end.duration_since(start);
+    println!("Done! Compression took {} ms.", duration.as_millis());
 
     Ok(())
 }
 
-fn get_output_path(output_folder_path: &str, input_path: &PathBuf) -> PathBuf {
-    let mut output_string = String::from(output_folder_path);
-    if !output_folder_path.ends_with('\\') {
-        output_string.push('\\');
-    }
-    let mut output_path = PathBuf::from(output_string);
-    let file_name = input_path.file_name().expect("Failed to get file name.");
-    output_path.push(file_name);
-    output_path
+fn get_output_path(output_folder_path: &str, input_path: &Path) -> PathBuf {
+    let mut output_file_path =
+        PathBuf::from_str(output_folder_path).expect("Failed to convert string to path.");
+
+    let file_name = input_path
+        .file_name()
+        .expect("Failed to get file name from path.");
+
+    output_file_path.push(file_name);
+    output_file_path
 }
 
 fn get_jpg_paths(folder_path: &str) -> Result<Vec<PathBuf>, Box<dyn Error>> {
-    let mut jpeg_paths: Vec<PathBuf> = Vec::new();
+    let mut jpg_paths: Vec<PathBuf> = Vec::new();
 
     let entries = fs::read_dir(folder_path)?;
     for entry in entries {
         let path = entry?.path();
         if let Some(ext) = path.extension() {
             if ext.to_ascii_lowercase() == "jpg" {
-                jpeg_paths.push(path);
+                jpg_paths.push(path);
             }
         }
     }
-    Ok(jpeg_paths)
+    Ok(jpg_paths)
 }
 
-fn compress(input_path: PathBuf, output_path: PathBuf) {
+fn compress(input_path: &PathBuf, output_path: &PathBuf) {
     // Load the image using the `image` crate
-    let img = ImageReader::open(&input_path).unwrap().decode().unwrap();
+    let img = ImageReader::open(input_path).unwrap().decode().unwrap();
 
     // Convert the image to RGB format
     let img = img.to_rgb8();
@@ -77,6 +92,4 @@ fn compress(input_path: PathBuf, output_path: PathBuf) {
 
     // Save the compressed image to a file
     std::fs::write(output_path, jpeg_data).unwrap();
-
-    println!("Image compression complete.");
 }

@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use std::process;
 
 use clap::{Args, Parser, Subcommand};
@@ -33,7 +32,7 @@ fn main() {
                 args.input_folder.as_ref().expect("").as_str(),
                 args.output_folder.as_ref().expect("").as_str(),
             ) {
-                println!("Application error {}", e);
+                eprintln!("Application error {}", e);
                 process::exit(1);
             }
         }
