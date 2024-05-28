@@ -1,4 +1,4 @@
-use std::process;
+use std::{path::PathBuf, process};
 
 use clap::{Args, Parser, Subcommand};
 
@@ -19,8 +19,8 @@ enum Commands {
 
 #[derive(Args)]
 struct CompressArgs {
-    input_folder: Option<String>,
-    output_folder: Option<String>,
+    input_folder: Option<PathBuf>,
+    output_folder: Option<PathBuf>,
 }
 
 fn main() {
@@ -29,8 +29,9 @@ fn main() {
     match &cli.commands {
         Commands::Compress(args) => {
             if let Err(e) = compress_image_files(
-                args.input_folder.as_ref().expect("").as_str(),
-                args.output_folder.as_ref().expect("").as_str(),
+                args.input_folder.as_ref().expect(""),
+                args.output_folder.as_ref().expect(""), // args.input_folder.as_ref().expect("").as_str(),
+                                                        // args.output_folder.as_ref().expect("").as_str(),
             ) {
                 eprintln!("Application error {}", e);
                 process::exit(1);

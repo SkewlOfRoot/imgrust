@@ -3,15 +3,14 @@ use rayon::prelude::*;
 use std::error::Error;
 use std::fs::{self};
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 use std::time::Instant;
 
 use image::io::Reader as ImageReader;
 use mozjpeg::{ColorSpace, Compress, ScanMode};
 
 pub fn compress_image_files(
-    input_folder_path: &str,
-    output_folder_path: &str,
+    input_folder_path: &PathBuf,
+    output_folder_path: &Path,
 ) -> Result<(), Box<dyn Error>> {
     let start = Instant::now();
 
@@ -37,9 +36,11 @@ pub fn compress_image_files(
     Ok(())
 }
 
-fn get_output_path(output_folder_path: &str, input_path: &Path) -> PathBuf {
-    let mut output_file_path =
-        PathBuf::from_str(output_folder_path).expect("Failed to convert string to path.");
+// Get the output path based on the input path.
+fn get_output_path(output_folder_path: &Path, input_path: &Path) -> PathBuf {
+    let mut output_file_path = PathBuf::from(output_folder_path);
+
+    //PathBuf::from_str(output_folder_path).expect("Failed to convert string to path.");
 
     let file_name = input_path
         .file_name()
@@ -49,7 +50,8 @@ fn get_output_path(output_folder_path: &str, input_path: &Path) -> PathBuf {
     output_file_path
 }
 
-fn get_jpg_paths(folder_path: &str) -> Result<Vec<PathBuf>, Box<dyn Error>> {
+// Locates all the JPG files in the given folder and returns the paths.
+fn get_jpg_paths(folder_path: &PathBuf) -> Result<Vec<PathBuf>, Box<dyn Error>> {
     let mut jpg_paths: Vec<PathBuf> = Vec::new();
 
     let entries = fs::read_dir(folder_path)?;
@@ -64,6 +66,7 @@ fn get_jpg_paths(folder_path: &str) -> Result<Vec<PathBuf>, Box<dyn Error>> {
     Ok(jpg_paths)
 }
 
+// Compresses the input image and saves it to the output path.
 fn compress(input_path: &PathBuf, output_path: &PathBuf) {
     // Load the image using the `image` crate
     let img = ImageReader::open(input_path).unwrap().decode().unwrap();
