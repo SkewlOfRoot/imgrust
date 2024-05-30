@@ -22,10 +22,10 @@ pub fn compress_image_files(
         names.push((input_path, output_path));
     }
 
-    let bar = ProgressBar::new(names.len().try_into().unwrap());
+    let bar = ProgressBar::new(names.len().try_into()?);
 
     names.par_iter().for_each(|x| {
-        compress(&x.1, &x.1);
+        compress(&x.0, &x.1);
         bar.inc(1)
     });
 
@@ -68,7 +68,6 @@ fn get_jpg_paths(folder_path: &PathBuf) -> Result<Vec<PathBuf>, Box<dyn Error>> 
 fn compress(input_path: &PathBuf, output_path: &PathBuf) {
     // Load the image using the `image` crate
     let img = ImageReader::open(input_path).unwrap().decode().unwrap();
-
     // Convert the image to RGB format
     let img = img.to_rgb8();
 
@@ -90,7 +89,8 @@ fn compress(input_path: &PathBuf, output_path: &PathBuf) {
 
     // Finish the compression process
     let jpeg_data = comp.finish().unwrap();
-
     // Save the compressed image to a file
-    std::fs::write(output_path, jpeg_data).unwrap();
+    if let Err(e) = std::fs::write(output_path, jpeg_data) {
+        panic!("Could not save file to output path. {}", e);
+    }
 }
