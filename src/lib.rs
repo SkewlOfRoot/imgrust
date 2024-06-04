@@ -24,8 +24,8 @@ pub fn compress_image_files(
 
     let bar = ProgressBar::new(names.len().try_into()?);
 
-    names.par_iter().for_each(|x| {
-        compress(&x.0, &x.1);
+    names.par_iter().for_each(|(input, output)| {
+        compress(input, output);
         bar.inc(1)
     });
 
