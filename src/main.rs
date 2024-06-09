@@ -5,15 +5,20 @@ use clap::{Args, Parser, Subcommand};
 use imgrust::compress_image_files;
 
 #[derive(Parser)]
-#[command(version, about, long_about = None)]
+#[clap(version, about, long_about = None)]
 #[command(propagate_version = true)]
 struct Cli {
+    /// Looks for media files recursively.
+    #[arg(short, long)]
+    recursive: bool,
+
     #[command(subcommand)]
     commands: Commands,
 }
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Compresses the found jpg files.
     Compress(CompressArgs),
 }
 
@@ -25,7 +30,6 @@ struct CompressArgs {
 
 fn main() {
     let cli = Cli::parse();
-
     match &cli.commands {
         Commands::Compress(args) => {
             if let Err(e) = compress_image_files(
@@ -35,6 +39,7 @@ fn main() {
                 args.output_folder
                     .as_ref()
                     .expect("Failed to parse to path."),
+                cli.recursive,
             ) {
                 eprintln!("Application error {}", e);
                 process::exit(1);
