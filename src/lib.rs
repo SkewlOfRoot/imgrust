@@ -16,17 +16,17 @@ pub fn compress_image_files(
 ) -> Result<(), Box<dyn Error>> {
     let start = Instant::now();
 
-    let input_paths = get_jpg_paths(input_folder_path, recursive)?;
+    let input_file_paths = jpg_paths(input_folder_path, recursive)?;
 
-    let mut names: Vec<(PathBuf, PathBuf)> = Vec::new();
-    for input_path in input_paths {
-        let output_path = get_output_path(output_folder_path, &input_path);
-        names.push((input_path, output_path));
+    let mut file_path_set: Vec<(PathBuf, PathBuf)> = Vec::new();
+    for input_file_path in input_file_paths {
+        let output_file_path = output_path(output_folder_path, &input_file_path);
+        file_path_set.push((input_file_path, output_file_path));
     }
 
-    let bar = ProgressBar::new(names.len().try_into()?);
+    let bar = ProgressBar::new(file_path_set.len().try_into()?);
 
-    names.par_iter().for_each(|(input, output)| {
+    file_path_set.par_iter().for_each(|(input, output)| {
         compress(input, output);
         bar.inc(1)
     });
@@ -39,7 +39,7 @@ pub fn compress_image_files(
 }
 
 // Get the output path based on the input path.
-fn get_output_path(output_folder_path: &Path, input_path: &Path) -> PathBuf {
+fn output_path(output_folder_path: &Path, input_path: &Path) -> PathBuf {
     let mut output_file_path = PathBuf::from(output_folder_path);
 
     let file_name = input_path
@@ -51,21 +51,21 @@ fn get_output_path(output_folder_path: &Path, input_path: &Path) -> PathBuf {
 }
 
 // Locates all the JPG files in the given folder and returns the paths.
-fn get_jpg_paths(folder_path: &PathBuf, recursive: bool) -> Result<Vec<PathBuf>, Box<dyn Error>> {
-    let mut jpg_paths: Vec<PathBuf> = Vec::new();
+fn jpg_paths(folder_path: &PathBuf, recursive: bool) -> Result<Vec<PathBuf>, Box<dyn Error>> {
+    let mut paths: Vec<PathBuf> = Vec::new();
 
     let entries = fs::read_dir(folder_path)?;
     for entry in entries {
         let path = entry?.path();
         if recursive && path.is_dir() {
-            jpg_paths.extend(get_jpg_paths(&path, recursive)?);
+            paths.extend(jpg_paths(&path, recursive)?);
         } else if let Some(ext) = path.extension() {
             if ext.to_ascii_lowercase() == "jpg" {
-                jpg_paths.push(path);
+                paths.push(path);
             }
         }
     }
-    Ok(jpg_paths)
+    Ok(paths)
 }
 
 // Compresses the input image and saves it to the output path.
@@ -103,13 +103,16 @@ fn compress(input_path: &PathBuf, output_path: &PathBuf) {
 
 // Copies the EXIF meta data from the input file to the output file.
 fn copy_exif(input_path: &PathBuf, output_path: &PathBuf) {
+    // Read data from files.
     let input_data = fs::read(input_path).unwrap();
     let output_data = fs::read(output_path).unwrap();
     let output_file = OpenOptions::new().write(true).open(output_path).unwrap();
 
+    // Read EXIF meta data from input file.
     let in_jpeg = Jpeg::from_bytes(input_data.into()).unwrap();
     let exif_metadata = in_jpeg.exif().unwrap();
 
+    // Write EXIF meta data to output file.
     let mut out_jpeg = Jpeg::from_bytes(output_data.clone().into()).unwrap();
     out_jpeg.set_exif(exif_metadata.into());
     out_jpeg.encoder().write_to(output_file).unwrap();
