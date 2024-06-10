@@ -13,3 +13,4 @@ indicatif = "0.17.8"
 clap = { version = "4.5.6", features = ["derive"] }
 kamadak-exif = "0.5.5"
 img-parts = "=0.3.0"
+colored = "2.1.0"

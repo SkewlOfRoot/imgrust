@@ -1,3 +1,4 @@
+use colored::{self, Colorize};
 use image::io::Reader as ImageReader;
 use img_parts::jpeg::Jpeg;
 use img_parts::ImageEXIF;
@@ -5,22 +6,24 @@ use indicatif::ProgressBar;
 use mozjpeg::{ColorSpace, Compress, ScanMode};
 use rayon::prelude::*;
 use std::error::Error;
+use std::ffi::OsString;
 use std::fs::{self, OpenOptions};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 pub fn compress_image_files(
-    input_folder_path: &PathBuf,
+    input_folder_path: &Path,
     output_folder_path: &Path,
+    output_pattern: &str,
     recursive: bool,
 ) -> Result<(), Box<dyn Error>> {
     let start = Instant::now();
 
-    let input_file_paths = jpg_paths(input_folder_path, recursive)?;
+    let input_file_paths = jpg_paths(input_folder_path, output_pattern, recursive)?;
 
     let mut file_path_set: Vec<(PathBuf, PathBuf)> = Vec::new();
     for input_file_path in input_file_paths {
-        let output_file_path = output_path(output_folder_path, &input_file_path);
+        let output_file_path = output_path(output_folder_path, &input_file_path, output_pattern);
         file_path_set.push((input_file_path, output_file_path));
     }
 
@@ -33,32 +36,48 @@ pub fn compress_image_files(
 
     let end = Instant::now();
     let duration = end.duration_since(start);
-    println!("Done! Compression took {} ms.", duration.as_millis());
+    println!(
+        "{}{}{}",
+        "Done! Compression took ".green(),
+        duration.as_millis().to_string().green(),
+        " ms.".green()
+    );
 
     Ok(())
 }
 
 // Get the output path based on the input path.
-fn output_path(output_folder_path: &Path, input_path: &Path) -> PathBuf {
-    let mut output_file_path = PathBuf::from(output_folder_path);
+fn output_path(output_folder_path: &Path, input_file_path: &Path, output_pattern: &str) -> PathBuf {
+    let mut output_file_path = output_folder_path.to_path_buf();
 
-    let file_name = input_path
-        .file_name()
-        .expect("Failed to get file name from path.");
+    let extension = input_file_path.extension().unwrap_or_default();
+
+    let file_name = input_file_path
+        .file_stem()
+        .expect("Failed to get file stem from path.");
+
+    let mut file_name = OsString::from(output_pattern.replace('X', file_name.to_str().unwrap()));
+    file_name.push(".");
+    file_name.push(extension);
 
     output_file_path.push(file_name);
     output_file_path
 }
 
 // Locates all the JPG files in the given folder and returns the paths.
-fn jpg_paths(folder_path: &PathBuf, recursive: bool) -> Result<Vec<PathBuf>, Box<dyn Error>> {
+fn jpg_paths(
+    folder_path: &Path,
+    output_pattern: &str,
+    recursive: bool,
+) -> Result<Vec<PathBuf>, Box<dyn Error>> {
+    // TODO: Only get jpg files that do not match the output pattern.
     let mut paths: Vec<PathBuf> = Vec::new();
 
     let entries = fs::read_dir(folder_path)?;
     for entry in entries {
         let path = entry?.path();
         if recursive && path.is_dir() {
-            paths.extend(jpg_paths(&path, recursive)?);
+            paths.extend(jpg_paths(&path, output_pattern, recursive)?);
         } else if let Some(ext) = path.extension() {
             if ext.to_ascii_lowercase() == "jpg" {
                 paths.push(path);
