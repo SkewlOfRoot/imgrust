@@ -41,7 +41,13 @@ fn main() {
     match &cli.commands {
         Commands::Compress(args) => {
             let output_folder: PathBuf = match &args.output_folder {
-                Some(val) => val.to_path_buf(),
+                Some(val) => {
+                    if val.eq(&args.input_folder) && cli.output_pattern.is_none() {
+                        eprintln!("Output pattern must be specified when output folder are equal to input folder.");
+                        process::exit(1);
+                    }
+                    val.to_path_buf()
+                }
                 None => {
                     if cli.output_pattern.is_none() {
                         eprintln!(

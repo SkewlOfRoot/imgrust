@@ -19,7 +19,7 @@ pub fn compress_image_files(
 ) -> Result<(), Box<dyn Error>> {
     let start = Instant::now();
 
-    let input_file_paths = jpg_paths(input_folder_path, output_pattern, recursive)?;
+    let input_file_paths = jpg_paths(input_folder_path, recursive)?;
 
     let mut file_path_set: Vec<(PathBuf, PathBuf)> = Vec::new();
     for input_file_path in input_file_paths {
@@ -65,11 +65,7 @@ fn output_path(output_folder_path: &Path, input_file_path: &Path, output_pattern
 }
 
 // Locates all the JPG files in the given folder and returns the paths.
-fn jpg_paths(
-    folder_path: &Path,
-    output_pattern: &str,
-    recursive: bool,
-) -> Result<Vec<PathBuf>, Box<dyn Error>> {
+fn jpg_paths(folder_path: &Path, recursive: bool) -> Result<Vec<PathBuf>, Box<dyn Error>> {
     // TODO: Only get jpg files that do not match the output pattern.
     let mut paths: Vec<PathBuf> = Vec::new();
 
@@ -77,7 +73,7 @@ fn jpg_paths(
     for entry in entries {
         let path = entry?.path();
         if recursive && path.is_dir() {
-            paths.extend(jpg_paths(&path, output_pattern, recursive)?);
+            paths.extend(jpg_paths(&path, recursive)?);
         } else if let Some(ext) = path.extension() {
             if ext.to_ascii_lowercase() == "jpg" {
                 paths.push(path);
