@@ -5,7 +5,6 @@ use img_parts::ImageEXIF;
 use indicatif::ProgressBar;
 use mozjpeg::{ColorSpace, Compress, ScanMode};
 use rayon::prelude::*;
-use std::error::Error;
 use std::ffi::OsString;
 use std::fs::{self, OpenOptions};
 use std::path::{Path, PathBuf};
@@ -16,7 +15,7 @@ pub fn compress_image_files(
     output_folder_path: &Path,
     output_pattern: &str,
     recursive: bool,
-) -> Result<(), Box<dyn Error>> {
+) -> anyhow::Result<()> {
     let start = Instant::now();
 
     let input_file_paths = jpg_paths(input_folder_path, recursive)?;
@@ -30,7 +29,7 @@ pub fn compress_image_files(
     let bar = ProgressBar::new(file_path_set.len().try_into()?);
 
     file_path_set.par_iter().for_each(|(input, output)| {
-        compress(input, output);
+        compress(input, output).expect("Compression failed.");
         bar.inc(1)
     });
 
@@ -65,7 +64,7 @@ fn output_path(output_folder_path: &Path, input_file_path: &Path, output_pattern
 }
 
 // Locates all the JPG files in the given folder and returns the paths.
-fn jpg_paths(folder_path: &Path, recursive: bool) -> Result<Vec<PathBuf>, Box<dyn Error>> {
+fn jpg_paths(folder_path: &Path, recursive: bool) -> anyhow::Result<Vec<PathBuf>> {
     // TODO: Only get jpg files that do not match the output pattern.
     let mut paths: Vec<PathBuf> = Vec::new();
 
@@ -84,7 +83,7 @@ fn jpg_paths(folder_path: &Path, recursive: bool) -> Result<Vec<PathBuf>, Box<dy
 }
 
 // Compresses the input image and saves it to the output path.
-fn compress(input_path: &PathBuf, output_path: &PathBuf) {
+fn compress(input_path: &PathBuf, output_path: &PathBuf) -> anyhow::Result<()> {
     // Load the image using the `image` crate
     let img = ImageReader::open(input_path).unwrap().decode().unwrap();
 
@@ -102,7 +101,7 @@ fn compress(input_path: &PathBuf, output_path: &PathBuf) {
     comp.set_size(img.width() as usize, img.height() as usize);
 
     // Begin the compression process
-    let mut comp = comp.start_compress(Vec::new()).unwrap();
+    let mut comp = comp.start_compress(Vec::new())?;
 
     // Write the pixel data to the compressor
     comp.write_scanlines(img.as_raw()).unwrap();
@@ -114,6 +113,8 @@ fn compress(input_path: &PathBuf, output_path: &PathBuf) {
         panic!("Could not save file to output path. {}", e);
     }
     copy_exif(input_path, output_path);
+
+    Ok(())
 }
 
 // Copies the EXIF meta data from the input file to the output file.
