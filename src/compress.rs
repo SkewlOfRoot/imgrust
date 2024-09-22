@@ -86,23 +86,18 @@ fn jpg_paths(folder_path: &Path, recursive: bool) -> anyhow::Result<Vec<PathBuf>
 fn compress(input_path: &PathBuf, output_path: &PathBuf) -> anyhow::Result<()> {
     // Load the image using the `image` crate
     let img = ImageReader::open(input_path).unwrap().decode().unwrap();
-
     // Convert the image to RGB format
     let img = img.to_rgb8();
 
     // Prepare for compression
     let mut comp = Compress::new(ColorSpace::JCS_RGB);
     comp.set_scan_optimization_mode(ScanMode::AllComponentsTogether);
-
     // Set the quality of the output JPEG (0 to 100)
     comp.set_quality(75.0);
-
     // Set the image dimensions
     comp.set_size(img.width() as usize, img.height() as usize);
-
     // Begin the compression process
     let mut comp = comp.start_compress(Vec::new())?;
-
     // Write the pixel data to the compressor
     comp.write_scanlines(img.as_raw()).unwrap();
 

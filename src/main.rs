@@ -7,7 +7,7 @@ use std::io::{stdin, stdout, Write};
 use std::path::Path;
 use std::{path::PathBuf, process};
 pub mod compress;
-pub mod folder_organizer;
+pub mod organizer;
 
 #[derive(Parser)]
 #[clap(version, about, long_about = None)]
@@ -17,8 +17,6 @@ struct Cli {
     #[arg(short, long)]
     recursive: bool,
 
-    // #[arg(long)]
-    // output_pattern: Option<String>,
     #[command(subcommand)]
     commands: Commands,
 }
@@ -27,7 +25,7 @@ struct Cli {
 enum Commands {
     /// Compresses the found jpg files.
     Compress(CompressArgs),
-    /// Organizes files in a folder.
+    /// Organizes image files in a directory.
     Organize(OrganizeArgs),
 }
 
@@ -40,13 +38,13 @@ struct CompressArgs {
     /// output file name: foo-c.jpg
     #[arg(long)]
     output_pattern: Option<String>,
-    input_folder: PathBuf,
-    output_folder: Option<PathBuf>,
+    input_dir: PathBuf,
+    output_dir: Option<PathBuf>,
 }
 
 #[derive(Args)]
 struct OrganizeArgs {
-    folder_path: PathBuf,
+    base_dir: PathBuf,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -58,7 +56,7 @@ fn main() -> anyhow::Result<()> {
             let output_folder = validate_compression_args(args);
 
             if let Err(e) = compress_image_files(
-                &args.input_folder,
+                &args.input_dir,
                 &output_folder,
                 &output_pattern,
                 cli.recursive,
@@ -70,12 +68,12 @@ fn main() -> anyhow::Result<()> {
             }
         }
         Commands::Organize(args) => {
-            println!("Do you want to organize files in folder? {:?}\r\n[Y] Yes [N] No (default is \"N\"):", path_to_absolute_path(&args.folder_path)?);
+            println!("Do you want to organize files in directory? {:?}\r\n[Y] Yes [N] No (default is \"N\"):", path_to_absolute_path(&args.base_dir)?);
 
             let input = read_input();
 
             if input == "Y" || input == "y" {
-                if let Err(e) = folder_organizer::organize_folder(&args.folder_path) {
+                if let Err(e) = organizer::organize_img_files(&args.base_dir) {
                     eprintln!("Application error {}", e);
                     process::exit(1);
                 }
@@ -119,9 +117,9 @@ pub fn path_to_absolute_path(path: impl AsRef<Path>) -> anyhow::Result<PathBuf> 
 
 // Validate compression arguments.
 fn validate_compression_args(args: &CompressArgs) -> PathBuf {
-    let output_folder: PathBuf = match &args.output_folder {
+    let output_folder: PathBuf = match &args.output_dir {
         Some(val) => {
-            if val.eq(&args.input_folder) && args.output_pattern.is_none() {
+            if val.eq(&args.input_dir) && args.output_pattern.is_none() {
                 eprintln!("Output pattern must be specified when output folder are equal to input folder.");
                 process::exit(1);
             }
@@ -135,7 +133,7 @@ fn validate_compression_args(args: &CompressArgs) -> PathBuf {
                 );
                 process::exit(1);
             }
-            args.input_folder.clone()
+            args.input_dir.clone()
         }
     };
     output_folder
