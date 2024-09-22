@@ -15,7 +15,13 @@ pub fn organize_img_files(base_dir: &PathBuf) -> anyhow::Result<()> {
         let file_name = entry.file_name();
 
         if is_image_file(&file_path) {
-            let date_taken = extract_image_date(&file_path)?;
+            let date_taken = if let Some(date) = extract_image_date(&file_path) {
+                date
+            } else {
+                eprintln!("DateTime not found in EXIF data.");
+                continue;
+            };
+
             let new_dir_name = date_taken.date().format("%Y-%m").to_string();
 
             let new_dir_path = base_dir.join(new_dir_name);
@@ -49,18 +55,23 @@ fn is_image_file(file_path: &Path) -> bool {
         || file_path.extension().unwrap_or_default() == "png";
 }
 
-fn extract_image_date(file_path: &Path) -> anyhow::Result<NaiveDateTime> {
+fn extract_image_date(file_path: &Path) -> Option<NaiveDateTime> {
     let exif_result = rexif::parse_file(file_path).unwrap();
 
-    if let Some(val) = exif_result
+    let date_time = exif_result
         .entries
         .iter()
         .find(|t| t.tag == rexif::ExifTag::DateTime)
-        .map(|t| &t.value)
-    {
-        let d = &val.to_string();
-        Ok(NaiveDateTime::parse_from_str(d, "%Y:%m:%d %H:%M:%S")?)
-    } else {
-        Err(anyhow!("DateTime not found in EXIF data."))
+        .map(|t| &t.value);
+
+    match date_time {
+        Some(date) => {
+            let d = &date.to_string();
+            Some(
+                NaiveDateTime::parse_from_str(d, "%Y:%m:%d %H:%M:%S")
+                    .expect("Error parsing string to date."),
+            )
+        }
+        None => None,
     }
 }
