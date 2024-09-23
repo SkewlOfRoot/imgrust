@@ -1,5 +1,4 @@
 use clap::{Args, Parser, Subcommand};
-use colored::{self, Colorize};
 use compress::compress_image_files;
 use path_clean::PathClean;
 use std::env;
@@ -13,33 +12,27 @@ pub mod organizer;
 #[clap(version, about, long_about = None)]
 #[command(propagate_version = true)]
 struct Cli {
-    /// Looks for media files recursively.
-    #[arg(short, long)]
-    recursive: bool,
-
     #[command(subcommand)]
     commands: Commands,
 }
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Compresses the found jpg files.
+    /// Will compress any detected jpg files. Compressed files will be postfixed with a '-c'. For example, 'hello.jpg' will become 'hello-c.jpg'.
     Compress(CompressArgs),
-    /// Organizes image files in a directory.
+    /// Organizes image files into directories based on the image files EXIF 'date taken' data. For example, an image with a 'date taken' on 2024-09-10 will be placed in a directory called '2024-09'.
     Organize(OrganizeArgs),
 }
 
 #[derive(Args)]
 struct CompressArgs {
-    /// The output pattern specifies how the output file name will be constructed.
-    /// Example:
-    /// input file name: foo.jpg |
-    /// output-pattern: "X-c" |
-    /// output file name: foo-c.jpg
-    #[arg(long)]
-    output_pattern: Option<String>,
+    /// Looks for media files recursively within the specified input directory.
+    #[arg(short, long)]
+    recursive: bool,
+    /// If set, the original uncompressed source file will be deleted. Only the compressed version will remain.
+    #[arg(short, long)]
+    delete_original: bool,
     input_dir: PathBuf,
-    output_dir: Option<PathBuf>,
 }
 
 #[derive(Args)]
@@ -52,15 +45,9 @@ fn main() -> anyhow::Result<()> {
 
     match &cli.commands {
         Commands::Compress(args) => {
-            let output_pattern = args.output_pattern.clone().unwrap_or_default();
-            let output_folder = validate_compression_args(args);
-
-            if let Err(e) = compress_image_files(
-                &args.input_dir,
-                &output_folder,
-                &output_pattern,
-                cli.recursive,
-            ) {
+            if let Err(e) =
+                compress_image_files(&args.input_dir, args.recursive, args.delete_original)
+            {
                 eprintln!("Application error {}", e);
                 process::exit(1);
             } else {
@@ -102,7 +89,7 @@ fn read_input() -> String {
 }
 
 // Convert any path to absolute path.
-pub fn path_to_absolute_path(path: impl AsRef<Path>) -> anyhow::Result<PathBuf> {
+fn path_to_absolute_path(path: impl AsRef<Path>) -> anyhow::Result<PathBuf> {
     let path = path.as_ref();
 
     let absolute_path = if path.is_absolute() {
@@ -113,28 +100,4 @@ pub fn path_to_absolute_path(path: impl AsRef<Path>) -> anyhow::Result<PathBuf> 
     .clean();
 
     Ok(absolute_path)
-}
-
-// Validate compression arguments.
-fn validate_compression_args(args: &CompressArgs) -> PathBuf {
-    let output_folder: PathBuf = match &args.output_dir {
-        Some(val) => {
-            if val.eq(&args.input_dir) && args.output_pattern.is_none() {
-                eprintln!("Output pattern must be specified when output folder are equal to input folder.");
-                process::exit(1);
-            }
-            val.to_path_buf()
-        }
-        None => {
-            if args.output_pattern.is_none() {
-                eprintln!(
-                    "{}",
-                    "When omitting the output folder an output pattern must be specified.".red()
-                );
-                process::exit(1);
-            }
-            args.input_dir.clone()
-        }
-    };
-    output_folder
 }

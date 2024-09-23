@@ -1,3 +1,4 @@
+use anyhow::{Context, Ok};
 use colored::{self, Colorize};
 use image::io::Reader as ImageReader;
 use img_parts::jpeg::Jpeg;
@@ -12,9 +13,8 @@ use std::time::Instant;
 
 pub fn compress_image_files(
     input_folder_path: &Path,
-    output_folder_path: &Path,
-    output_pattern: &str,
     recursive: bool,
+    delete_original: bool,
 ) -> anyhow::Result<()> {
     let start = Instant::now();
 
@@ -22,14 +22,19 @@ pub fn compress_image_files(
 
     let mut file_path_set: Vec<(PathBuf, PathBuf)> = Vec::new();
     for input_file_path in input_file_paths {
-        let output_file_path = output_path(output_folder_path, &input_file_path, output_pattern);
+        let output_file_path = output_path(&input_file_path);
         file_path_set.push((input_file_path, output_file_path));
     }
 
     let bar = ProgressBar::new(file_path_set.len().try_into()?);
 
     file_path_set.par_iter().for_each(|(input, output)| {
-        compress(input, output).expect("Compression failed.");
+        compress(input, output)
+            .context("Compressing image file.")
+            .unwrap();
+        if delete_original {
+            delete_file(input).context("Delete file").unwrap();
+        }
         bar.inc(1)
     });
 
@@ -46,16 +51,21 @@ pub fn compress_image_files(
 }
 
 // Get the output path based on the input path.
-fn output_path(output_folder_path: &Path, input_file_path: &Path, output_pattern: &str) -> PathBuf {
-    let mut output_file_path = output_folder_path.to_path_buf();
+fn output_path(input_file_path: &Path) -> PathBuf {
+    let mut output_file_path = input_file_path.parent().unwrap().to_path_buf();
 
     let extension = input_file_path.extension().unwrap_or_default();
 
-    let file_name = input_file_path
+    // Get the file stem and convert it to str.
+    let file_stem = input_file_path
         .file_stem()
-        .expect("Failed to get file stem from path.");
+        .expect("Failed to get file stem from path.")
+        .to_str()
+        .context("Convert to str")
+        .unwrap();
 
-    let mut file_name = OsString::from(output_pattern.replace('X', file_name.to_str().unwrap()));
+    // Post-fix the compressed file name with '-c'. It will later be renamed to its original file name.
+    let mut file_name = OsString::from(format!("{}-c", file_stem));
     file_name.push(".");
     file_name.push(extension);
 
@@ -65,7 +75,6 @@ fn output_path(output_folder_path: &Path, input_file_path: &Path, output_pattern
 
 // Locates all the JPG files in the given folder and returns the paths.
 fn jpg_paths(folder_path: &Path, recursive: bool) -> anyhow::Result<Vec<PathBuf>> {
-    // TODO: Only get jpg files that do not match the output pattern.
     let mut paths: Vec<PathBuf> = Vec::new();
 
     let entries = fs::read_dir(folder_path)?;
@@ -73,10 +82,12 @@ fn jpg_paths(folder_path: &Path, recursive: bool) -> anyhow::Result<Vec<PathBuf>
         let path = entry?.path();
         if recursive && path.is_dir() {
             paths.extend(jpg_paths(&path, recursive)?);
-        } else if let Some(ext) = path.extension() {
-            if ext.to_ascii_lowercase() == "jpg" {
-                paths.push(path);
-            }
+        } else {
+            path.extension()
+                .is_some_and(|ext| ext.to_ascii_lowercase() == "jpg")
+                .then(|| {
+                    paths.push(path);
+                });
         }
     }
     Ok(paths)
@@ -127,4 +138,9 @@ fn copy_exif(input_path: &PathBuf, output_path: &PathBuf) {
     let mut out_jpeg = Jpeg::from_bytes(output_data.clone().into()).unwrap();
     out_jpeg.set_exif(exif_metadata.into());
     out_jpeg.encoder().write_to(output_file).unwrap();
+}
+
+fn delete_file(input: &PathBuf) -> anyhow::Result<()> {
+    fs::remove_file(input)?;
+    Ok(())
 }
