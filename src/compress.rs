@@ -33,7 +33,7 @@ pub fn compress_image_files(
             .context("Compressing image file.")
             .unwrap();
         if delete_original {
-            delete_file(input).context("Delete file").unwrap();
+            fs::remove_file(input).context("Remove file").unwrap();
         }
         bar.inc(1)
     });
@@ -59,7 +59,8 @@ fn output_path(input_file_path: &Path) -> PathBuf {
     // Get the file stem and convert it to str.
     let file_stem = input_file_path
         .file_stem()
-        .expect("Failed to get file stem from path.")
+        .context("Failed to get file stem from path.")
+        .unwrap()
         .to_str()
         .context("Convert to str")
         .unwrap();
@@ -138,9 +139,4 @@ fn copy_exif(input_path: &PathBuf, output_path: &PathBuf) {
     let mut out_jpeg = Jpeg::from_bytes(output_data.clone().into()).unwrap();
     out_jpeg.set_exif(exif_metadata.into());
     out_jpeg.encoder().write_to(output_file).unwrap();
-}
-
-fn delete_file(input: &PathBuf) -> anyhow::Result<()> {
-    fs::remove_file(input)?;
-    Ok(())
 }
