@@ -31,7 +31,6 @@ pub fn organize_img_files(base_dir: &PathBuf) -> anyhow::Result<()> {
         };
 
         let new_dir_name = created_date.date().format("%Y-%m").to_string();
-
         let new_dir_path = base_dir.join(new_dir_name);
         if !new_dir_path.exists() {
             fs::create_dir(&new_dir_path)?;
@@ -48,7 +47,6 @@ pub fn organize_img_files(base_dir: &PathBuf) -> anyhow::Result<()> {
             );
         }
     }
-
     Ok(())
 }
 
@@ -89,8 +87,7 @@ impl Image {
     }
 
     fn created_date(&self) -> Option<NaiveDateTime> {
-        let exif_result = rexif::parse_file(&self.file_path).unwrap();
-
+        let exif_result = rexif::parse_file(&self.file_path).context("rexif").unwrap();
         let date_time = exif_result
             .entries
             .iter()
