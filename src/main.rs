@@ -4,6 +4,7 @@ use path_clean::PathClean;
 use std::env;
 use std::io::{stdin, stdout, Write};
 use std::path::Path;
+use std::str::FromStr;
 use std::{path::PathBuf, process};
 pub mod compress;
 pub mod organizer;
@@ -32,7 +33,8 @@ struct CompressArgs {
     /// If set, the original uncompressed source file will be deleted. Only the compressed version will remain.
     #[arg(short, long)]
     delete_original: bool,
-    input_dir: PathBuf,
+    /// An optional input path. Default value is current working directory. Can be either a path to a directory or a path to a single file.
+    input_path: Option<PathBuf>,
 }
 
 #[derive(Args)]
@@ -45,13 +47,18 @@ fn main() -> anyhow::Result<()> {
 
     match &cli.commands {
         Commands::Compress(args) => {
-            if let Err(e) =
-                compress_image_files(&args.input_dir, args.recursive, args.delete_original)
-            {
-                eprintln!("Application error {}", e);
-                process::exit(1);
-            } else {
-                Ok(())
+            // Use current working directory if no input path is specified.
+            let input_path: PathBuf = match &args.input_path {
+                Some(path) => path.to_path_buf(),
+                None => PathBuf::from_str("./").unwrap(),
+            };
+
+            match compress_image_files(&input_path, args.recursive, args.delete_original) {
+                Ok(()) => Ok(()),
+                Err(e) => {
+                    eprintln!("Application error {}", e);
+                    process::exit(1);
+                }
             }
         }
         Commands::Organize(args) => {

@@ -1,4 +1,4 @@
-use anyhow::{Context, Ok};
+use anyhow::{anyhow, Context, Ok};
 use colored::{self, Colorize};
 use image::io::Reader as ImageReader;
 use img_parts::jpeg::Jpeg;
@@ -12,14 +12,21 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 pub fn compress_image_files(
-    input_folder_path: &Path,
+    input_path: &Path,
     recursive: bool,
     delete_original: bool,
 ) -> anyhow::Result<()> {
     let start = Instant::now();
 
-    let input_file_paths = jpg_paths(input_folder_path, recursive)?;
+    // If input path is just a path to a single file, we get a vec with only that path,
+    // otherwise we find all the image file paths in the directory.
+    let input_file_paths: Vec<PathBuf> = if input_path.is_file() {
+        vec![input_path.to_path_buf()]
+    } else {
+        jpg_paths(input_path, recursive)?
+    };
 
+    // Determine the output path for all files that are to be processed.
     let mut file_path_set: Vec<(PathBuf, PathBuf)> = Vec::new();
     for input_file_path in input_file_paths {
         let output_file_path = output_path(&input_file_path);
@@ -28,11 +35,15 @@ pub fn compress_image_files(
 
     let bar = ProgressBar::new(file_path_set.len().try_into()?);
 
+    // Compress the images in parallel.
     file_path_set.par_iter().for_each(|(input, output)| {
-        compress(input, output)
-            .context("Compressing image file.")
-            .unwrap();
-        if delete_original {
+        if let Err(e) = compress(input, output) {
+            eprintln!(
+                "Failed to compress file '{}'. Reason: {}",
+                input.display(),
+                e
+            );
+        } else if delete_original {
             fs::remove_file(input).context("Remove file").unwrap();
         }
         bar.inc(1)
@@ -74,11 +85,11 @@ fn output_path(input_file_path: &Path) -> PathBuf {
     output_file_path
 }
 
-// Locates all the JPG files in the given folder and returns the paths.
-fn jpg_paths(folder_path: &Path, recursive: bool) -> anyhow::Result<Vec<PathBuf>> {
+// Locates all the JPG files in the given directory and returns the paths.
+fn jpg_paths(input_path: &Path, recursive: bool) -> anyhow::Result<Vec<PathBuf>> {
     let mut paths: Vec<PathBuf> = Vec::new();
 
-    let entries = fs::read_dir(folder_path)?;
+    let entries = fs::read_dir(input_path)?;
     for entry in entries {
         let path = entry?.path();
         if recursive && path.is_dir() {
@@ -97,7 +108,19 @@ fn jpg_paths(folder_path: &Path, recursive: bool) -> anyhow::Result<Vec<PathBuf>
 // Compresses the input image and saves it to the output path.
 fn compress(input_path: &PathBuf, output_path: &PathBuf) -> anyhow::Result<()> {
     // Load the image using the `image` crate
-    let img = ImageReader::open(input_path).unwrap().decode().unwrap();
+    let img = match ImageReader::open(input_path)
+        .expect("Failed to open file.")
+        .decode()
+    {
+        core::result::Result::Ok(img) => img,
+        Err(e) => {
+            return Err(anyhow!(
+                "Failed to decode file '{}'. Reason: {}",
+                input_path.display(),
+                e
+            ))
+        }
+    };
     // Convert the image to RGB format
     let img = img.to_rgb8();
 
@@ -119,13 +142,12 @@ fn compress(input_path: &PathBuf, output_path: &PathBuf) -> anyhow::Result<()> {
     if let Err(e) = std::fs::write(output_path, jpeg_data) {
         panic!("Could not save file to output path. {}", e);
     }
-    copy_exif(input_path, output_path);
-
+    copy_exif(input_path, output_path)?;
     Ok(())
 }
 
 // Copies the EXIF meta data from the input file to the output file.
-fn copy_exif(input_path: &PathBuf, output_path: &PathBuf) {
+fn copy_exif(input_path: &PathBuf, output_path: &PathBuf) -> anyhow::Result<()> {
     // Read data from files.
     let input_data = fs::read(input_path).unwrap();
     let output_data = fs::read(output_path).unwrap();
@@ -133,10 +155,20 @@ fn copy_exif(input_path: &PathBuf, output_path: &PathBuf) {
 
     // Read EXIF meta data from input file.
     let in_jpeg = Jpeg::from_bytes(input_data.into()).unwrap();
-    let exif_metadata = in_jpeg.exif().unwrap();
+    let exif_metadata = match in_jpeg.exif() {
+        Some(exif) => exif,
+        None => {
+            return Err(anyhow!(
+                "EXIF data not found in file '{}'.",
+                &input_path.display().to_string()
+            ))
+        }
+    };
 
     // Write EXIF meta data to output file.
     let mut out_jpeg = Jpeg::from_bytes(output_data.clone().into()).unwrap();
     out_jpeg.set_exif(exif_metadata.into());
     out_jpeg.encoder().write_to(output_file).unwrap();
+
+    Ok(())
 }
