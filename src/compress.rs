@@ -113,13 +113,7 @@ fn compress(input_path: &PathBuf, output_path: &PathBuf) -> anyhow::Result<()> {
         .decode()
     {
         core::result::Result::Ok(img) => img,
-        Err(e) => {
-            return Err(anyhow!(
-                "Failed to decode file '{}'. Reason: {}",
-                input_path.display(),
-                e
-            ))
-        }
+        Err(e) => return Err(anyhow!("Failed to decode. Reason: {}", e)),
     };
     // Convert the image to RGB format
     let img = img.to_rgb8();
@@ -157,12 +151,7 @@ fn copy_exif(input_path: &PathBuf, output_path: &PathBuf) -> anyhow::Result<()> 
     let in_jpeg = Jpeg::from_bytes(input_data.into()).unwrap();
     let exif_metadata = match in_jpeg.exif() {
         Some(exif) => exif,
-        None => {
-            return Err(anyhow!(
-                "EXIF data not found in file '{}'.",
-                &input_path.display().to_string()
-            ))
-        }
+        None => return Err(anyhow!("EXIF data not found in file.")),
     };
 
     // Write EXIF meta data to output file.
