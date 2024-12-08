@@ -1,5 +1,5 @@
-use anyhow::{anyhow, Context};
-use chrono::NaiveDateTime;
+use super::files::{Image, MediaFile, Video};
+use anyhow::anyhow;
 use std::fs::{self};
 use std::path::{Path, PathBuf};
 use std::result::Result::Ok;
@@ -8,6 +8,7 @@ pub fn organize_img_files(base_dir: &PathBuf) -> anyhow::Result<()> {
     if !base_dir.is_dir() {
         return Err(anyhow!("An invalid directory was specified."));
     }
+
     let entries = fs::read_dir(base_dir)?;
 
     for entry in entries {
@@ -64,84 +65,5 @@ fn get_media_file(file_path: &Path) -> Option<MediaFile> {
         "jpg" | "jpeg" | "png" => Some(MediaFile::Image(Image::new(file_path))),
         "mp4" => Some(MediaFile::Video(Video::new(file_path))),
         _ => None,
-    }
-}
-
-enum MediaFile {
-    Image(Image),
-    Video(Video),
-}
-
-struct Image {
-    file_path: PathBuf,
-}
-struct Video {
-    file_path: PathBuf,
-}
-
-impl Image {
-    fn new(file_path: &Path) -> Image {
-        Image {
-            file_path: file_path.to_owned(),
-        }
-    }
-
-    fn created_date(&self) -> Option<NaiveDateTime> {
-        let exif_result = rexif::parse_file(&self.file_path).context("rexif").unwrap();
-        let date_time = exif_result
-            .entries
-            .iter()
-            .find(|t| t.tag == rexif::ExifTag::DateTime)
-            .map(|t| &t.value);
-
-        match date_time {
-            Some(date) => {
-                let d = &date.to_string();
-                Some(
-                    NaiveDateTime::parse_from_str(d, "%Y:%m:%d %H:%M:%S")
-                        .expect("Error parsing string to date."),
-                )
-            }
-            None => None,
-        }
-    }
-}
-
-impl Video {
-    fn new(file_path: &Path) -> Video {
-        Video {
-            file_path: file_path.to_owned(),
-        }
-    }
-
-    fn created_date(&self) -> Option<NaiveDateTime> {
-        let meta_data = ffprobe::ffprobe(&self.file_path)
-            .context("ffprobe")
-            .unwrap();
-
-        for stream in meta_data.streams {
-            let tags = if let Some(t) = stream.tags {
-                t
-            } else {
-                continue;
-            };
-
-            if let Some(date_str) = tags.creation_time {
-                let date = chrono::DateTime::parse_from_rfc3339(&date_str);
-                match date {
-                    Ok(d) => return Some(d.naive_utc()),
-                    Err(e) => {
-                        eprintln!(
-                            "Failed to parse '{}' to NativeDateTime. Error: {}",
-                            &date_str, e
-                        );
-                        continue;
-                    }
-                };
-            } else {
-                continue;
-            };
-        }
-        None
     }
 }

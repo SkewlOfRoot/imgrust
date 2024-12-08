@@ -1,3 +1,4 @@
+use super::files::{Image, MediaFile, Video};
 use anyhow::{anyhow, Context, Ok};
 use colored::{self, Colorize};
 use image::io::Reader as ImageReader;
@@ -6,7 +7,6 @@ use img_parts::ImageEXIF;
 use indicatif::ProgressBar;
 use mozjpeg::{ColorSpace, Compress, ScanMode};
 use rayon::prelude::*;
-use std::ffi::OsString;
 use std::fs::{self, OpenOptions};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -20,32 +20,33 @@ pub fn compress_image_files(
 
     // If input path is just a path to a single file, we get a vec with only that path,
     // otherwise we find all the image file paths in the directory.
-    let input_file_paths: Vec<PathBuf> = if input_path.is_file() {
-        vec![input_path.to_path_buf()]
+    let input_file_paths: Vec<MediaFile> = if input_path.is_file() {
+        load_media_file(input_path).into_iter().collect()
     } else {
-        jpg_paths(input_path, recursive)?
+        load_media_files(input_path, recursive)?
     };
 
-    // Determine the output path for all files that are to be processed.
-    let mut file_path_set: Vec<(PathBuf, PathBuf)> = Vec::new();
-    for input_file_path in input_file_paths {
-        let output_file_path = output_path(&input_file_path);
-        file_path_set.push((input_file_path, output_file_path));
-    }
-
-    let bar = ProgressBar::new(file_path_set.len().try_into()?);
+    let bar = ProgressBar::new(input_file_paths.len().try_into()?);
 
     // Compress the images in parallel.
-    file_path_set.par_iter().for_each(|(input, output)| {
-        if let Err(e) = compress(input, output) {
-            eprintln!(
-                "Failed to compress file '{}'. Reason: {}",
-                input.display(),
-                e
-            );
-        } else if delete_original {
-            fs::remove_file(input).context("Remove file").unwrap();
+    input_file_paths.par_iter().for_each(|media_file| {
+        match media_file {
+            MediaFile::Image(image) => {
+                if let Err(e) = compress_image_file(image) {
+                    eprintln!(
+                        "Failed to compress file '{}'. Reason: {}",
+                        image.file_path.display(),
+                        e
+                    );
+                } else if delete_original {
+                    fs::remove_file(&image.file_path)
+                        .context("Remove file")
+                        .unwrap();
+                }
+            }
+            MediaFile::Video(video) => {}
         }
+
         bar.inc(1)
     });
 
@@ -61,54 +62,37 @@ pub fn compress_image_files(
     Ok(())
 }
 
-// Get the output path based on the input path.
-fn output_path(input_file_path: &Path) -> PathBuf {
-    let mut output_file_path = input_file_path.parent().unwrap().to_path_buf();
-
-    let extension = input_file_path.extension().unwrap_or_default();
-
-    // Get the file stem and convert it to str.
-    let file_stem = input_file_path
-        .file_stem()
-        .context("Failed to get file stem from path.")
-        .unwrap()
-        .to_str()
-        .context("Convert to str")
-        .unwrap();
-
-    // Post-fix the compressed file name with '-c'. It will later be renamed to its original file name.
-    let mut file_name = OsString::from(format!("{}-c", file_stem));
-    file_name.push(".");
-    file_name.push(extension);
-
-    output_file_path.push(file_name);
-    output_file_path
-}
-
-// Locates all the JPG files in the given directory and returns the paths.
-fn jpg_paths(input_path: &Path, recursive: bool) -> anyhow::Result<Vec<PathBuf>> {
-    let mut paths: Vec<PathBuf> = Vec::new();
+// Locates all the supported media files in the given directory and returns the paths.
+fn load_media_files(input_path: &Path, recursive: bool) -> anyhow::Result<Vec<MediaFile>> {
+    let mut paths: Vec<MediaFile> = Vec::new();
 
     let entries = fs::read_dir(input_path)?;
     for entry in entries {
         let path = entry?.path();
         if recursive && path.is_dir() {
-            paths.extend(jpg_paths(&path, recursive)?);
-        } else {
-            path.extension()
-                .is_some_and(|ext| ext.to_ascii_lowercase() == "jpg")
-                .then(|| {
-                    paths.push(path);
-                });
+            paths.extend(load_media_files(&path, recursive)?);
+        } else if let Some(path) = load_media_file(&path) {
+            paths.push(path)
         }
     }
     Ok(paths)
 }
 
+/// Attempts to load a media file from the given path. If the file is a supported
+/// media file type (jpg, mp4), it is returned as a `MediaFile` enum variant.
+/// Otherwise `None` is returned.
+fn load_media_file(path: &Path) -> Option<MediaFile> {
+    match path.extension()?.to_ascii_lowercase().to_str().unwrap() {
+        "jpg" => Some(MediaFile::Image(Image::new(path))),
+        "mp4" => Some(MediaFile::Video(Video::new(path))),
+        _ => None,
+    }
+}
+
 // Compresses the input image and saves it to the output path.
-fn compress(input_path: &PathBuf, output_path: &PathBuf) -> anyhow::Result<()> {
+fn compress_image_file(image_file: &Image) -> anyhow::Result<()> {
     // Load the image using the `image` crate
-    let img = match ImageReader::open(input_path)
+    let img = match ImageReader::open(&image_file.file_path)
         .expect("Failed to open file.")
         .decode()
     {
@@ -133,10 +117,10 @@ fn compress(input_path: &PathBuf, output_path: &PathBuf) -> anyhow::Result<()> {
     // Finish the compression process
     let jpeg_data = comp.finish().unwrap();
     // Save the compressed image to a file
-    if let Err(e) = std::fs::write(output_path, jpeg_data) {
+    if let Err(e) = std::fs::write(&image_file.output_path, jpeg_data) {
         panic!("Could not save file to output path. {}", e);
     }
-    copy_exif(input_path, output_path)?;
+    copy_exif(&image_file.file_path, &image_file.output_path)?;
     Ok(())
 }
 

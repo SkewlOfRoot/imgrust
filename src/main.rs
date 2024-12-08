@@ -7,6 +7,7 @@ use std::path::Path;
 use std::str::FromStr;
 use std::{path::PathBuf, process};
 pub mod compress;
+pub mod files;
 pub mod organizer;
 
 #[derive(Parser)]
